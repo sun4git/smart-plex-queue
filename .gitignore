@@ -1,0 +1,13 @@
+# Logs
+logs/
+*.log
+
+# Process IDs
+*.pid
+
+# App state toggles
+.smart-queue-enabled
+
+# Python caches
+__pycache__/
+*.pyc

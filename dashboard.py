@@ -328,11 +328,64 @@ def start_listener(port):
     return is_port_open(port)
 
 
+# Must match the unit filename in systemd/smart-plex-queue-listener.service.
+SYSTEMD_UNIT = "smart-plex-queue-listener.service"
+
+
+def is_systemd_managed():
+    """True if SYSTEMD_UNIT is an installed systemd unit on this box,
+    running or not. Checked via LoadState (not is-active) so a manually
+    `systemctl stop`-ped unit still counts - otherwise Restart would fall
+    through to our own kill+relaunch below and spin up a listener process
+    systemd doesn't know about, alongside whatever it manages."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "-p", "LoadState", "--value", SYSTEMD_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "loaded"
+    except Exception:
+        return False
+
+
+def restart_listener_via_systemd(port):
+    try:
+        result = subprocess.run(
+            ["systemctl", "restart", SYSTEMD_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            log(f"❌ systemctl restart {SYSTEMD_UNIT} failed: {result.stderr.strip()}")
+            return False
+    except Exception as e:
+        log(f"❌ systemctl restart {SYSTEMD_UNIT} error: {e}")
+        return False
+
+    for _ in range(25):
+        if is_port_open(port):
+            return True
+        time.sleep(0.2)
+    return False
+
+
 def restart_listener(port):
+    """Restart the listener. Prefers `systemctl restart` when the listener
+    is a systemd-managed unit (see SYSTEMD_UNIT) - manually killing and
+    relaunching it ourselves in that case would race against systemd's own
+    supervision (Restart=on-failure) and could leave two processes both
+    trying to bind the same port. Falls back to a manual kill+relaunch for
+    setups not running under systemd (e.g. local dev, restart.sh)."""
+    if is_systemd_managed():
+        log(f"🔁 Delegating restart to systemd ({SYSTEMD_UNIT})")
+        return restart_listener_via_systemd(port)
+
     stop_listener(port)
     time.sleep(0.3)
-    started = start_listener(port)
-    return started
+    return start_listener(port)
 
 
 # --- Log tailing ---

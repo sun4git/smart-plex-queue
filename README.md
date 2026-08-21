@@ -107,6 +107,32 @@ missing or stale (e.g. a crash that skipped cleanup, or a listener started
 before this existed), the dashboard falls back to finding the process by
 its port.
 
+## Running as a systemd Service
+
+For actual crash-recovery (not just start-on-boot), use the unit files in
+`systemd/` instead of a cron `@reboot` entry - cron will start these once,
+but won't bring them back if one crashes later; systemd will.
+
+```bash
+# Edit User= and WorkingDirectory= in both files first to match your box,
+# and confirm the python3 path with `which python3`.
+sudo cp systemd/smart-plex-queue-listener.service systemd/smart-plex-queue-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now smart-plex-queue-listener.service
+sudo systemctl enable --now smart-plex-queue-dashboard.service
+```
+
+Check status and logs with `systemctl status smart-plex-queue-listener` /
+`journalctl -u smart-plex-queue-listener -f` (same for `-dashboard`).
+
+**Important:** once systemd owns these processes, stop using `restart.sh`
+and the dashboard's Restart Listener button to manage them - both do their
+own kill-and-relaunch, which will race against systemd's own supervision
+(you'd end up with two processes both trying to bind the same port). Use
+`sudo systemctl restart smart-plex-queue-listener` instead. `restart.sh`
+is still fine to use for local/manual testing setups that don't run under
+systemd.
+
 ## Quick Commands
 
 All commands should be run from this directory:

@@ -109,6 +109,14 @@ its port.
 
 ## Running as a systemd Service
 
+**Optional.** Everything above (`restart.sh`, `queue_control.py`, the
+dashboard) works exactly as documented with or without this - installing
+the units below only adds crash-recovery on top. If you skip this section
+entirely, nothing changes: `dashboard.py`'s restart logic only switches to
+`systemctl restart` once it detects `smart-plex-queue-listener.service` is
+actually installed (see `is_systemd_managed()` in `dashboard.py`); until
+then it's the same manual kill-and-relaunch it's always been.
+
 For actual crash-recovery (not just start-on-boot), use the unit files in
 `systemd/` instead of a cron `@reboot` entry - cron will start these once,
 but won't bring them back if one crashes later; systemd will.

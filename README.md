@@ -17,9 +17,77 @@ The smart queue can be toggled on/off via a flag file. When enabled, webhooks ar
 smart-plex-queue/
 ├── queue_listener.py            # Main webhook listener service (port 8000)
 ├── queue_control.py             # CLI control interface
+├── dashboard.py                 # Web UI dashboard (port 8001) - control layer only
+├── dashboard/                   # Dashboard static assets (HTML/CSS/JS)
 ├── restart.sh                   # Hard-restart script (stops + starts)
 ├── README.md                    # This file
 ```
+
+## Web Dashboard
+
+A browser dashboard for enabling/disabling the feature, watching the log
+live, and restarting the listener - without needing the CLI.
+
+```bash
+python3 dashboard.py            # Defaults to port 8001
+```
+
+Then open `http://localhost:8001/` (or `http://<host>:8001/` on your LAN).
+
+From the dashboard you can enable/disable the feature, watch the log live,
+restart the listener, and edit **Listener Settings** (MediaSage server URL,
+log file path) - saved to a shared config file both processes read.
+
+The dashboard is a pure UI/control layer: it never imports or changes the
+webhook/recommendation logic in `queue_listener.py`. It talks to the same
+toggle file, PID file, and log file the listener manages itself, and starts/
+stops that *process* the same way `restart.sh` does.
+
+**Security note:** the dashboard has no authentication - anyone who can
+reach its port can enable/disable the feature or restart the listener. It
+binds to `0.0.0.0` by default (reachable from your LAN); set
+`DASHBOARD_HOST=127.0.0.1` if you want to restrict it to just this machine,
+and never expose this port to the internet.
+
+| Env var | Default | Description |
+|---------|---------|--------------|
+| `DASHBOARD_HOST` | `0.0.0.0` | Interface the dashboard binds to |
+| `QUEUE_LISTENER_PORT` | `8000` | Port the dashboard expects/starts the listener on |
+
+`restart.sh` restarts both the listener and the dashboard together.
+
+## Shared Config File
+
+`../.smart-queue-config.json` (workspace root, untracked - same convention
+as the toggle file) holds settings both the dashboard and the listener care
+about:
+
+```json
+{
+  "mediasage_host": "http://192.168.1.100:5765/api",
+  "log_file": "../logs/smart-queue.log"
+}
+```
+
+Both keys are optional - omit the file entirely, or omit either key, and
+`queue_listener.py` falls back to its built-in defaults (the same ones it
+always had). You can edit this file by hand or through the dashboard's
+Listener Settings card; either way, only `queue_listener.py` reads it, and
+only at startup, so a change takes effect on the next restart. The
+`MEDIASAGE_HOST` environment variable still overrides the config file if
+you set one (so `restart-queue-listener.bat` etc. keep working unchanged).
+
+## PID Files
+
+`queue_listener.py` and `dashboard.py` each write their own PID to
+`../logs/queue_listener.pid` and `../logs/dashboard.pid` on startup, and
+remove it on a clean shutdown (SIGTERM/SIGINT). `restart.sh` and the
+dashboard's Restart button only ever *read* these files to know what to
+stop - nothing else writes to them, so there's one source of truth per
+process instead of each script tracking PIDs independently. If a file is
+missing or stale (e.g. a crash that skipped cleanup, or a listener started
+before this existed), the dashboard falls back to finding the process by
+its port.
 
 ## Quick Commands
 

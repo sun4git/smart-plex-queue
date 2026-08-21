@@ -28,6 +28,7 @@ import sys
 import json
 import time
 import random
+import signal
 import requests
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -38,10 +39,38 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_DIR = os.path.dirname(SCRIPT_DIR) # This reliably points to the parent folder
 
 TOGGLE_FILE = os.path.join(WORKSPACE_DIR, ".smart-queue-enabled")
-LOG_FILE = os.path.join(WORKSPACE_DIR, "logs", "smart-queue.log")
-MEDIASAGE_API = os.getenv(
-    "MEDIASAGE_HOST",
-    "http://192.168.1.100:5765/api"
+# Self-managed: this process writes its own PID here on startup and removes
+# it on a clean shutdown. dashboard.py and restart.sh read it to know what
+# to stop - neither of them writes to it, avoiding two different scripts
+# tracking the same process independently and drifting apart.
+PID_FILE = os.path.join(WORKSPACE_DIR, "logs", "queue_listener.pid")
+
+# Settings shared with dashboard.py via a small JSON file it manages
+# (MediaSage host, log file location). Optional - if it's missing, or
+# dashboard.py has simply never been used, everything falls back to the
+# same defaults this script always had.
+CONFIG_FILE = os.path.join(WORKSPACE_DIR, ".smart-queue-config.json")
+
+
+def _load_shared_config():
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+_shared_config = _load_shared_config()
+
+LOG_FILE = _shared_config.get("log_file") or os.path.join(
+    WORKSPACE_DIR, "logs", "smart-queue.log"
+)
+# Env var still wins over the config file, so existing restart scripts that
+# already export MEDIASAGE_HOST keep working unchanged.
+MEDIASAGE_API = (
+    os.getenv("MEDIASAGE_HOST")
+    or _shared_config.get("mediasage_host")
+    or "http://192.168.1.100:5765/api"
 )
 
 # Track recently processed tracks to avoid duplicates (keyed by client_id)
@@ -1056,7 +1085,40 @@ class QueueHandler(BaseHTTPRequestHandler):
         pass
 
 
+def _write_pid_file():
+    try:
+        os.makedirs(os.path.dirname(PID_FILE), exist_ok=True)
+        with open(PID_FILE, "w") as f:
+            f.write(str(os.getpid()))
+    except Exception as e:
+        log(f"⚠️ Could not write PID file: {e}")
+
+
+def _remove_pid_file():
+    """Only remove it if it still points at us - a newer instance may have
+    already overwritten it by the time we get here."""
+    try:
+        if os.path.exists(PID_FILE):
+            with open(PID_FILE, "r") as f:
+                if f.read().strip() == str(os.getpid()):
+                    os.remove(PID_FILE)
+    except Exception:
+        pass
+
+
+def _handle_termination(signum, frame):
+    _remove_pid_file()
+    sys.exit(0)
+
+
 def run_server(port=8000):
+    _write_pid_file()
+    # SIGTERM is how restart.sh / dashboard.py normally stop this process
+    # (a plain `kill`, not -9) - without a handler it would exit without
+    # running the cleanup below and leave a stale PID file behind.
+    signal.signal(signal.SIGTERM, _handle_termination)
+    signal.signal(signal.SIGINT, _handle_termination)
+
     server = HTTPServer(("0.0.0.0", port), QueueHandler)
 
     log(
@@ -1068,7 +1130,10 @@ def run_server(port=8000):
         f"Feature is {'ENABLED' if is_enabled() else 'DISABLED'}"
     )
 
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        _remove_pid_file()
 
 
 if __name__ == "__main__":

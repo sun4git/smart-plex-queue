@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Plex Queue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo-group">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                </svg>
+                <div>
+                    <div class="logo">Smart Plex Queue</div>
+                    <div class="logo-sub">Listener Dashboard</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <span id="port-pill" class="pill">port --</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Status & Controls -->
+            <section class="card">
+                <h2 class="card-title">Status</h2>
+                <div class="status-grid">
+                    <div class="status-row">
+                        <div class="status-row-left">
+                            <span id="feature-dot" class="status-dot off"></span>
+                            <div>
+                                <div class="status-label">Smart Queue Feature</div>
+                                <div id="feature-value" class="status-value muted-text">Checking&hellip;</div>
+                            </div>
+                        </div>
+                        <label class="switch" title="Enable or disable smart queueing">
+                            <input type="checkbox" id="enable-toggle" disabled>
+                            <span class="switch-track"></span>
+                        </label>
+                    </div>
+                    <div class="status-row">
+                        <div class="status-row-left">
+                            <span id="listener-dot" class="status-dot off"></span>
+                            <div>
+                                <div class="status-label">Listener Process</div>
+                                <div id="listener-value" class="status-value muted-text">Checking&hellip;</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions-row">
+                    <button id="restart-btn" class="btn btn-primary">
+                        <svg class="btn-icon" id="restart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+                            <path d="M21 3v6h-6"/>
+                        </svg>
+                        <span id="restart-label">Restart Listener</span>
+                    </button>
+                    <span id="last-checked" class="pill">Last checked: --</span>
+                </div>
+            </section>
+
+            <!-- Listener Settings (shared with queue_listener.py via .smart-queue-config.json) -->
+            <section class="card">
+                <h2 class="card-title">Listener Settings</h2>
+                <p class="field-hint">Shared with the listener process via <code>.smart-queue-config.json</code>. Changes apply the next time the listener restarts.</p>
+
+                <div class="form-group">
+                    <label for="mediasage-host-input">MediaSage Server URL</label>
+                    <div class="field-row">
+                        <input type="text" id="mediasage-host-input" placeholder="http://192.168.1.100:5765/api" autocomplete="off" spellcheck="false">
+                        <button id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="log-file-input">Log File Path</label>
+                    <input type="text" id="log-file-input" placeholder="../logs/smart-queue.log" autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="actions-row">
+                    <button id="save-config-btn" class="btn btn-primary">Save Settings</button>
+                </div>
+
+                <div id="config-status" class="config-status hidden">
+                    <span id="config-status-dot" class="status-dot off"></span>
+                    <span id="config-status-text"></span>
+                </div>
+            </section>
+
+            <!-- Logs -->
+            <section class="card">
+                <div class="logs-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Live Log</h2>
+                    <div class="logs-controls">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autorefresh-toggle" checked>
+                            Auto-refresh
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoscroll-toggle" checked>
+                            Auto-scroll
+                        </label>
+                        <button id="clear-log-btn" class="btn-link">Clear view</button>
+                    </div>
+                </div>
+                <div id="log-console" class="log-console" aria-live="polite">
+                    <div class="log-empty">Waiting for log output&hellip;</div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <a href="https://github.com/sun4git/smart-plex-queue" target="_blank" rel="noopener" class="footer-brand">Smart Plex Queue</a>
+            <span id="log-path" class="pill"></span>
+        </footer>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite">
+        <span id="toast-message"></span>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

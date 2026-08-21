@@ -37,13 +37,16 @@ PYEOF
     fi
 }
 
-# dashboard.log has no config override (it's dashboard.py's own fixed
-# path), but smart-queue.log's location can be overridden - resolve the
-# real one so the message below doesn't lie about where it is.
+# smart-queue.log's location can be overridden via the config file -
+# resolve the real one so the message below doesn't lie about where it is.
+# dashboard.log always lives in the same directory (see
+# get_dashboard_log_file() in dashboard.py) even though it's a separate
+# file, so derive its path from wherever smart-queue.log ended up too.
 ACTIVITY_LOG=$(get_config_value "log_file")
 if [ -z "$ACTIVITY_LOG" ]; then
     ACTIVITY_LOG="../logs/smart-queue.log"
 fi
+DASHBOARD_ACTIVITY_LOG="$(dirname "$ACTIVITY_LOG")/dashboard.log"
 
 stop_by_pidfile() {
     local pid_file="$1"
@@ -98,7 +101,7 @@ sleep 1
 if ps -p $NEW_DASHBOARD_PID > /dev/null 2>&1; then
     echo "✅ Dashboard started successfully (PID: $NEW_DASHBOARD_PID)"
     echo "📋 Console log: $DASHBOARD_CONSOLE_LOG"
-    echo "📋 Activity log: ../logs/dashboard.log"
+    echo "📋 Activity log: $DASHBOARD_ACTIVITY_LOG"
 else
     echo "❌ Failed to start dashboard"
     exit 1

@@ -57,10 +57,12 @@ LISTENER_SCRIPT = os.path.join(SCRIPT_DIR, "queue_listener.py")
 LISTENER_PID_FILE = os.path.join(WORKSPACE_DIR, "logs", "queue_listener.pid")
 DASHBOARD_PID_FILE = os.path.join(WORKSPACE_DIR, "logs", "dashboard.pid")
 
-# The dashboard's own activity log - separate from queue_listener.py's
-# smart-queue.log, since it records dashboard-triggered actions (toggles,
-# restarts, settings changes), not webhook/recommendation activity.
-DASHBOARD_LOG_FILE = os.path.join(WORKSPACE_DIR, "logs", "dashboard.log")
+# The dashboard's own activity log - a separate FILE from queue_listener.py's
+# smart-queue.log (records dashboard-triggered actions like toggles and
+# restarts, not webhook/recommendation activity - and two independent
+# processes shouldn't share one write target without real coordination),
+# but the same DIRECTORY, always - see get_dashboard_log_file() below.
+DASHBOARD_LOG_FILENAME = "dashboard.log"
 
 # Settings shared with queue_listener.py (MediaSage host, log file location).
 # This file is the one thing the dashboard *does* write on the listener's
@@ -82,14 +84,23 @@ STATIC_FILES = {
 
 # --- Activity log ---
 
+def get_dashboard_log_file():
+    """dashboard.log always lives next to wherever the listener's own log
+    is configured to live, so relocating one relocates both - even though
+    they stay separate files (see DASHBOARD_LOG_FILENAME above)."""
+    log_dir = os.path.dirname(get_log_file()) or os.path.join(WORKSPACE_DIR, "logs")
+    return os.path.join(log_dir, DASHBOARD_LOG_FILENAME)
+
+
 def log(message):
     """Timestamped line to dashboard.log, same format as queue_listener.py's
     own log() so the two read like one product family."""
     line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}"
     print(line, flush=True)
     try:
-        os.makedirs(os.path.dirname(DASHBOARD_LOG_FILE), exist_ok=True)
-        with open(DASHBOARD_LOG_FILE, "a", encoding="utf-8") as f:
+        path = get_dashboard_log_file()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception:
         pass

@@ -89,7 +89,11 @@ Everything lives under `../logs/` (gitignored, created automatically):
 | `dashboard-console.log` | `restart.sh` | Raw stdout/stderr from the dashboard process |
 
 `smart-queue.log`'s location can be overridden via the shared config file
-below; the others are fixed paths.
+below (`log_file`). `dashboard.log` always lives in the same *directory* as
+`smart-queue.log` - even after an override - though it stays a separate
+file, since the listener and dashboard are independent processes and
+writing both into one file would need cross-process coordination neither
+has. The two console logs are always at fixed paths.
 
 ## PID Files
 

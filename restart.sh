@@ -10,6 +10,40 @@
 APP_DIR="."
 PID_FILE="../logs/queue_listener.pid"
 DASHBOARD_PID_FILE="../logs/dashboard.pid"
+# Same path dashboard.py itself uses when it restarts the listener from the
+# UI, so the console log ends up in one place regardless of which restart
+# path triggered it.
+CONSOLE_LOG="../logs/smart-queue-console.log"
+DASHBOARD_CONSOLE_LOG="../logs/dashboard-console.log"
+# Same file queue_listener.py and dashboard.py both read/write - see
+# CONFIG_FILE in either of those.
+CONFIG_FILE="../.smart-queue-config.json"
+
+# Read one string key out of the shared JSON config, or print nothing if
+# the file/key is missing. Uses python3 (already required) instead of
+# fragile shell JSON parsing.
+get_config_value() {
+    local key="$1"
+    if [ -f "$CONFIG_FILE" ]; then
+        python3 - "$CONFIG_FILE" "$key" <<'PYEOF'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        cfg = json.load(f)
+    print(cfg.get(sys.argv[2]) or "")
+except Exception:
+    print("")
+PYEOF
+    fi
+}
+
+# dashboard.log has no config override (it's dashboard.py's own fixed
+# path), but smart-queue.log's location can be overridden - resolve the
+# real one so the message below doesn't lie about where it is.
+ACTIVITY_LOG=$(get_config_value "log_file")
+if [ -z "$ACTIVITY_LOG" ]; then
+    ACTIVITY_LOG="../logs/smart-queue.log"
+fi
 
 stop_by_pidfile() {
     local pid_file="$1"
@@ -35,14 +69,16 @@ sleep 1
 # Start the listener
 echo "Starting queue listener..."
 cd "$APP_DIR"
-nohup python3 -u queue_listener.py > /tmp/smart_queue_console.log 2>&1 &
+mkdir -p ../logs
+nohup python3 -u queue_listener.py > "$CONSOLE_LOG" 2>&1 &
 NEW_PID=$!
 sleep 2
 
 # Verify it's running
 if ps -p $NEW_PID > /dev/null 2>&1; then
     echo "✅ Queue listener started successfully (PID: $NEW_PID)"
-    echo "📋 Log: /tmp/smart_queue_console.log"
+    echo "📋 Console log: $CONSOLE_LOG"
+    echo "📋 Activity log: $ACTIVITY_LOG"
 else
     echo "❌ Failed to start queue listener"
     exit 1
@@ -55,13 +91,14 @@ pkill -f "dashboard.py" 2>/dev/null
 sleep 1
 
 echo "Starting dashboard..."
-nohup python3 -u dashboard.py > /tmp/smart_queue_dashboard_console.log 2>&1 &
+nohup python3 -u dashboard.py > "$DASHBOARD_CONSOLE_LOG" 2>&1 &
 NEW_DASHBOARD_PID=$!
 sleep 1
 
 if ps -p $NEW_DASHBOARD_PID > /dev/null 2>&1; then
     echo "✅ Dashboard started successfully (PID: $NEW_DASHBOARD_PID)"
-    echo "📋 Log: /tmp/smart_queue_dashboard_console.log"
+    echo "📋 Console log: $DASHBOARD_CONSOLE_LOG"
+    echo "📋 Activity log: ../logs/dashboard.log"
 else
     echo "❌ Failed to start dashboard"
     exit 1

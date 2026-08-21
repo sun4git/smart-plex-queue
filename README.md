@@ -77,6 +77,20 @@ only at startup, so a change takes effect on the next restart. The
 `MEDIASAGE_HOST` environment variable still overrides the config file if
 you set one (so `restart-queue-listener.bat` etc. keep working unchanged).
 
+## Log Files
+
+Everything lives under `../logs/` (gitignored, created automatically):
+
+| File | Written by | What's in it |
+|------|-----------|---------------|
+| `smart-queue.log` | `queue_listener.py` | Structured webhook/recommendation activity - what the dashboard's log view tails |
+| `dashboard.log` | `dashboard.py` | Dashboard-triggered actions: enable/disable, restart requests, settings saves, failed connection tests |
+| `smart-queue-console.log` | whatever starts the listener (`restart.sh` or the dashboard's Restart button) | Raw stdout/stderr from the listener process - crash tracebacks, anything printed before logging is set up |
+| `dashboard-console.log` | `restart.sh` | Raw stdout/stderr from the dashboard process |
+
+`smart-queue.log`'s location can be overridden via the shared config file
+below; the others are fixed paths.
+
 ## PID Files
 
 `queue_listener.py` and `dashboard.py` each write their own PID to

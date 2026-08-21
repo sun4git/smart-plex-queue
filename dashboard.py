@@ -57,6 +57,11 @@ LISTENER_SCRIPT = os.path.join(SCRIPT_DIR, "queue_listener.py")
 LISTENER_PID_FILE = os.path.join(WORKSPACE_DIR, "logs", "queue_listener.pid")
 DASHBOARD_PID_FILE = os.path.join(WORKSPACE_DIR, "logs", "dashboard.pid")
 
+# The dashboard's own activity log - separate from queue_listener.py's
+# smart-queue.log, since it records dashboard-triggered actions (toggles,
+# restarts, settings changes), not webhook/recommendation activity.
+DASHBOARD_LOG_FILE = os.path.join(WORKSPACE_DIR, "logs", "dashboard.log")
+
 # Settings shared with queue_listener.py (MediaSage host, log file location).
 # This file is the one thing the dashboard *does* write on the listener's
 # behalf - queue_listener.py only ever reads it, at startup.
@@ -73,6 +78,21 @@ STATIC_FILES = {
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "application/javascript; charset=utf-8"),
 }
+
+
+# --- Activity log ---
+
+def log(message):
+    """Timestamped line to dashboard.log, same format as queue_listener.py's
+    own log() so the two read like one product family."""
+    line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}"
+    print(line, flush=True)
+    try:
+        os.makedirs(os.path.dirname(DASHBOARD_LOG_FILE), exist_ok=True)
+        with open(DASHBOARD_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 # --- Toggle file (feature enable/disable) ---
@@ -426,6 +446,10 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if log_file:
                 cfg["log_file"] = log_file
             save_config(cfg)
+            log(
+                f"⚙️ Settings saved: mediasage_host={host}, "
+                f"log_file={log_file or '(default)'}"
+            )
             self._send_json(
                 {
                     "ok": True,
@@ -446,21 +470,31 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 )
                 return
             ok, status_code, detail = test_mediasage_connection(host)
+            if not ok:
+                log(f"🔌 Connection test failed for {host}: {detail.get('error', status_code)}")
             self._send_json({"ok": ok, "status_code": status_code, "detail": detail, "host": host})
             return
 
         if path == "/api/enable":
             set_enabled(True)
+            log("🟢 Smart Queue enabled via dashboard")
             self._send_json({"ok": True, "enabled": True})
             return
 
         if path == "/api/disable":
             set_enabled(False)
+            log("⚪ Smart Queue disabled via dashboard")
             self._send_json({"ok": True, "enabled": False})
             return
 
         if path == "/api/restart":
+            log("🔁 Restart requested via dashboard")
             ok = restart_listener(LISTENER_PORT)
+            log(
+                "✅ Listener restarted successfully"
+                if ok
+                else "❌ Listener did not come back up in time after restart"
+            )
             self._send_json(
                 {
                     "ok": ok,
@@ -510,8 +544,7 @@ def run(port=8001):
     signal.signal(signal.SIGINT, _handle_dashboard_termination)
 
     server = ThreadingHTTPServer((host, port), DashboardHandler)
-    print(f"Smart Plex Queue Dashboard running at http://{host}:{port}")
-    print(f"Controlling listener on port {LISTENER_PORT} (toggle file: {TOGGLE_FILE})")
+    log(f"🚀 Dashboard started at http://{host}:{port} (controlling listener on port {LISTENER_PORT})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
